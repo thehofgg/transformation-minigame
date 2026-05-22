@@ -153,17 +153,18 @@ html,body{width:100%;height:100%;background:#04101e;overflow:hidden;
 .go-id-uid{font-family:"Orbitron",monospace;font-size:.75rem;color:var(--acc);letter-spacing:.05em}
 
 /* ── Rank display ── */
-.rank-box{text-align:center;padding:4px 0 2px}
-.rank-saving{font-size:.75rem;color:var(--pri);animation:pulse 1.2s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
-.rank-result{display:flex;flex-direction:column;align-items:center;gap:4px}
-.rank-result.hidden{display:none}
-.rank-badge{font-family:"Orbitron",monospace;font-size:1.4rem;font-weight:900;
-  color:var(--acc);text-shadow:0 0 16px var(--acc),0 0 32px rgba(255,216,77,.4);
-  letter-spacing:.06em}
-.rank-detail{font-size:.72rem;color:#8ab0cc;letter-spacing:.05em}
-.rank-record{font-family:"Orbitron",monospace;font-size:.65rem;color:#4dffb0;
-  text-shadow:0 0 10px #4dffb0;letter-spacing:.1em;margin-top:2px}
+.rank-box{padding:4px 0 2px}
+.pb-row{display:flex;justify-content:space-between;align-items:center}
+.pb-lbl{font-family:"Orbitron",monospace;font-size:.52rem;letter-spacing:.14em;
+  color:var(--pri);opacity:.8;text-transform:uppercase}
+.pb-val{font-family:"Orbitron",monospace;font-size:1.15rem;font-weight:900;
+  color:var(--acc);text-shadow:0 0 12px var(--acc)}
+.rank-record{font-family:"Orbitron",monospace;font-size:.65rem;
+  text-align:center;letter-spacing:.08em;margin-top:5px;
+  min-height:1.1em;transition:color .3s}
+.rank-record.new-record{color:#4dffb0;text-shadow:0 0 10px #4dffb0}
+.rank-record.same{color:#5a7fa0}
+.rank-record.first{color:var(--acc);text-shadow:0 0 10px var(--acc)}
 
 /* Share hint */
 .go-share-hint{font-size:.68rem;color:#4a6a80;text-align:center;
@@ -217,8 +218,8 @@ html,body{width:100%;height:100%;background:#04101e;overflow:hidden;
         <input id="iUID" type="text" placeholder="A-Z, 0-9 ไม่เกิน 6 ตัว" autocomplete="off" spellcheck="false" maxlength="6" inputmode="text" style="text-transform:uppercase"/>
       </div>
       <div class="field">
-        <label for="iNick">ชื่อในเกม (Nickname)</label>
-        <input id="iNick" type="text" placeholder="ชื่อนักรบกุ๊กไก่" autocomplete="off" spellcheck="false"/>
+        <label for="iNick">ชื่อเล่น</label>
+        <input id="iNick" type="text" placeholder="ชื่อเล่นของคุณ" autocomplete="off" spellcheck="false"/>
       </div>
       <div class="err" id="lErr"></div>
       <button class="btn btn-s" id="btnStart">⚔️ เริ่มต่อสู้!</button>
@@ -244,12 +245,11 @@ html,body{width:100%;height:100%;background:#04101e;overflow:hidden;
       <div class="div"></div>
       <!-- Rank display -->
       <div class="rank-box" id="rankBox">
-        <div class="rank-saving" id="rankSaving">กำลังบันทึกและตรวจสอบอันดับ…</div>
-        <div class="rank-result hidden" id="rankResult">
-          <div class="rank-badge" id="rankBadge"></div>
-          <div class="rank-detail" id="rankDetail"></div>
-          <div class="rank-record" id="rankRecord"></div>
+        <div class="pb-row">
+          <span class="pb-lbl">สถิติสูงสุด</span>
+          <span class="pb-val" id="pbScore">—</span>
         </div>
+        <div class="rank-record" id="rankRecord"></div>
       </div>
       <div class="div"></div>
       <div class="go-share-hint">📸 แคปภาพนี้เพื่อเข้าร่วมกิจกรรมหน้าแฟนเพจได้เล๊ยย!</div>
@@ -583,6 +583,7 @@ let targetX=CFG.W/2;
 
 // Timers / cooldowns
 let lastFire=0, lastShootSnd=0;
+let eventLog=[], gameStartTime=0;  // gameplay telemetry
 let lastBuff=0;          // last time a buff dropped
 let minionTimer=0;       // ms since last minion spawn
 let minionBatchLeft=0;   // how many minions left to spawn in current wave
@@ -641,6 +642,7 @@ function initGame(){
   buffDouble=false; buffRapid=false; buffDoubleEnd=0; buffRapidEnd=0;
   buffDoubleEl.style.opacity="0"; buffRapidEl.style.opacity="0";
   player={x:CFG.W/2, y:CFG.H*CFG.PY};
+  eventLog=[]; gameStartTime=Date.now();
   loadStage(0);
   updHUD();
 }
@@ -913,6 +915,7 @@ function update(now, dt){
     const e=minions[i]; e.y+=e.spd;
     if(e.y-e.h/2 > CFG.H){
       minions.splice(i,1); lives--; updHUD(); flashDmg(); SFX.lifeLost();
+      eventLog.push({t:Math.round((Date.now()-gameStartTime)/1000),e:"damage",hp:lives});
       if(lives<=0){ doGameOver(); return; }
     }
   }
@@ -935,6 +938,8 @@ function update(now, dt){
           const mt=CFG.MINIONS[e.ti];
           spawnPt(e.x,e.y,mt.col);
           SFX.explode(false);
+          const _t=Math.round((Date.now()-gameStartTime)/1000);
+          eventLog.push({t:_t,e:"kill",type:mt.key,pts:mt.pts,score:score+mt.pts});
           score+=mt.pts; comboN++;
           if(comboN>=3) flashComboBanner(`COMBO x${comboN}! ⚡`);
           minions.splice(ei,1); updHUD();
@@ -948,6 +953,7 @@ function update(now, dt){
         boss.hp--; boss.hitFlash=8;
         lasers.splice(li,1);
         SFX.bossHit();
+        eventLog.push({t:Math.round((Date.now()-gameStartTime)/1000),e:"boss_hit",hp:boss.hp});
         updateBossHPUI();
         spawnPt(boss.x+Math.random()*40-20, boss.y+Math.random()*30-15,"#ff8844",4);
         if(boss.hp<=0){
@@ -955,6 +961,7 @@ function update(now, dt){
           spawnPt(boss.x,boss.y,"#ffd84d",20);
           SFX.stageClear();
           score += (stageIdx+1)*50;  // stage clear bonus
+          eventLog.push({t:Math.round((Date.now()-gameStartTime)/1000),e:"stage_clear",stage:stageIdx+1,score:score});
           updHUD();
           boss=null; bossHPWrap.style.display="none";
           showStageBanner(`MISSION ${stageIdx+1} CLEAR`);
@@ -984,6 +991,7 @@ function update(now, dt){
     if(hit(b.x-CFG.BUFF_W/2,b.y-CFG.BUFF_H/2,CFG.BUFF_W,CFG.BUFF_H,
            player.x-CFG.PW/2,player.y-CFG.PH/2,CFG.PW,CFG.PH)){
       SFX.buffPickup();
+      eventLog.push({t:Math.round((Date.now()-gameStartTime)/1000),e:"buff",type:b.type});
       if(b.type==="double"){
         buffDouble=true; buffDoubleEnd=now+CFG.BUFF_DURATION;
         showBuffFlash("⚡ ยิงเร็ว เปิดใช้งาน!");
@@ -1058,9 +1066,9 @@ function doGameOver(){
   document.getElementById("goUIDCard").textContent   = uid;
 
   // Reset rank UI
-  document.getElementById("rankSaving").style.display  = "block";
-  document.getElementById("rankResult").classList.add("hidden");
-  document.getElementById("rankRecord").textContent    = "";
+  document.getElementById("pbScore").textContent = "—";
+  document.getElementById("rankRecord").textContent = "";
+  document.getElementById("rankRecord").className   = "rank-record";
 
   bossHPWrap.style.display = "none";
   show("go");
@@ -1085,69 +1093,94 @@ function lbSave(arr) {
   try { localStorage.setItem(LB_KEY, JSON.stringify(arr.slice(0, 500))); } catch {}
 }
 
+/* ─────────────────────────────────────────
+   ANTI-CHEAT: validate event log server-side
+───────────────────────────────────────── */
+function buildTelemetry(u, n, s) {
+  const duration = Math.round((Date.now() - gameStartTime) / 1000);
+
+  // Client-side sanity checks (soft flags – Sheet will decide)
+  const kills      = eventLog.filter(e => e.e === "kill").length;
+  const scoreFromKills = eventLog.filter(e=>e.e==="kill").reduce((a,b)=>a+b.pts,0)
+                       + eventLog.filter(e=>e.e==="stage_clear").length * 50;
+  const scoreMismatch  = Math.abs(scoreFromKills - s) > 5;  // allow tiny rounding
+  const minDuration    = [25, 50, 80, 110, 140, 170][Math.min(stageIdx, 5)];
+  const tooFast        = duration < minDuration;
+  const maxScore       = [350, 800, 1400, 2200, 3200, 4500][Math.min(stageIdx, 5)];
+  const scoreOverflow  = s > maxScore;
+
+  // Simple token: sha-less HMAC substitute
+  const secret  = "TR2026KK";
+  const token   = btoa(`${u}:${s}:${duration}:${secret}`).split("").reverse().join("").slice(0, 32);
+
+  return {
+    uid: u, nickname: n, score: s,
+    stage: stageIdx + 1,
+    duration_sec: duration,
+    kill_count: kills,
+    events: eventLog.slice(0, 300),   // cap at 300 events
+    token,
+    // Pre-computed flags (Sheet re-validates independently)
+    flags: {
+      score_mismatch:  scoreMismatch,
+      too_fast:        tooFast,
+      score_overflow:  scoreOverflow,
+    }
+  };
+}
+
 async function saveAndRank(u, n, s) {
-  const lb    = lbLoad();
-  const now   = Date.now();
+  const lb  = lbLoad();
+  const now = Date.now();
 
-  // Find previous personal best
-  const prev  = lb.find(e => e.uid === u);
+  // Personal best for this UID
+  const prev    = lb.find(e => e.uid === u);
   const oldBest = prev ? prev.score : 0;
-  const isNewRecord = s > oldBest;
+  const isNew   = s > oldBest;
 
-  // Upsert entry (keep highest score per uid)
+  // Upsert (keep highest score per uid)
   const idx = lb.findIndex(e => e.uid === u);
-  const entry = { uid: u, nick: n, score: s, ts: now };
-  if (idx >= 0) {
-    if (s >= lb[idx].score) lb[idx] = entry;
-  } else {
-    lb.push(entry);
-  }
-
-  // Sort descending
-  lb.sort((a, b) => b.score - a.score);
+  if (idx >= 0) { if (s >= lb[idx].score) lb[idx] = { uid:u, nick:n, score:s, ts:now }; }
+  else lb.push({ uid:u, nick:n, score:s, ts:now });
   lbSave(lb);
 
-  // Compute rank
-  const rank  = lb.findIndex(e => e.uid === u) + 1;
-  const total = lb.length;
+  // Show personal best
+  const best = Math.max(s, oldBest);
+  document.getElementById("pbScore").textContent = best;
 
-  // Show rank result
-  document.getElementById("rankSaving").style.display = "none";
-  const res = document.getElementById("rankResult");
-  res.classList.remove("hidden");
-
-  const rankBadge  = document.getElementById("rankBadge");
-  const rankDetail = document.getElementById("rankDetail");
-  const rankRecord = document.getElementById("rankRecord");
-
-  // Rank badge styling
-  let medalTxt = `#${rank}`;
-  if      (rank === 1) medalTxt = "🥇 #1";
-  else if (rank === 2) medalTxt = "🥈 #2";
-  else if (rank === 3) medalTxt = "🥉 #3";
-
-  rankBadge.textContent  = medalTxt;
-  rankDetail.textContent = `อันดับที่ ${rank} จากทั้งหมด ${total} ผู้เล่น`;
-
-  if (isNewRecord && oldBest > 0) {
-    rankRecord.textContent = `NEW RECORD! +${s - oldBest} pts จากสถิติเดิม`;
-  } else if (isNewRecord && oldBest === 0) {
-    rankRecord.textContent = "ผู้เล่นใหม่ – สถิติแรกของคุณบันทึกแล้ว!";
+  const rec = document.getElementById("rankRecord");
+  if (isNew && oldBest > 0) {
+    rec.textContent = `NEW RECORD  +${s - oldBest} PTS`;
+    rec.className   = "rank-record new-record";
+  } else if (isNew && oldBest === 0) {
+    rec.textContent = "FIRST SCORE — SAVED!";
+    rec.className   = "rank-record first";
   } else {
-    rankRecord.textContent = `สถิติเดิม ${oldBest} pts`;
+    rec.textContent = `BEST ${oldBest} PTS`;
+    rec.className   = "rank-record same";
   }
 
-  // Submit to Google Sheet (fire-and-forget)
+  // Submit telemetry to Google Sheet
   try {
+    const payload = buildTelemetry(u, n, s);
     await fetch(CFG.BACKEND, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ uid: u, nickname: n, score: s, stage: stageIdx + 1, rank }),
+      body: JSON.stringify(payload),
       mode: "no-cors",
     });
   } catch {}
-}
 
+  // Anti-cheat warning
+  const dur    = Math.round((Date.now()-gameStartTime)/1000);
+  const maxSc  = [350,800,1400,2200,3200,4500][Math.min(stageIdx,5)];
+  const minDur = [25,50,80,110,140,170][Math.min(stageIdx,5)];
+  if (s > maxSc || dur < minDur) {
+    rec.textContent = "SCORE UNDER REVIEW";
+    rec.className   = "rank-record";
+    rec.style.color = "#ff9900";
+  }
+}
 /* ══════════════════════════════════════════
    INPUT
 ══════════════════════════════════════════ */
